@@ -1,0 +1,83 @@
+name: Build LLVM
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  GH_USER: ${{ secrets.GH_USER }}
+  GH_EMAIL: ${{ secrets.GH_EMAIL }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  TZ: Asia/Jakarta
+  LLVM_URL: https://github.com/llvm/llvm-project.git
+  CACHE_KEY: llvm-build-${{ github.run_id }}
+
+jobs:
+  clone:
+    name: Cloning Project (llvm source)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Cache LLVM Source
+        uses: actions/cache@v3
+        with:
+          path: src/llvm-project
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Clone LLVM
+        run: git clone --single-branch "$LLVM_URL" -b main src/llvm-project --depth=1
+
+  profile_build:
+    name: Build LLVM (profile)
+    needs: clone
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Restore Cached LLVM Source
+        uses: actions/cache@v3
+        with:
+          path: src/llvm-project
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Build LLVM Profile
+        run: |
+          ./tc_scripts/init.sh profile
+          find build/llvm/instrumented -type f ! -name 'profdata.prof' -delete
+
+      - name: Cache Build Profile
+        uses: actions/cache@v3
+        with:
+          path: build/llvm/instrumented
+          key: ${{ env.CACHE_KEY }}-profile
+
+  final_build:
+    name: Build LLVM (final)
+    needs: profile_build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Restore Cached LLVM Source
+        uses: actions/cache@v3
+        with:
+          path: src/llvm-project
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Restore Cached Build Profile
+        uses: actions/cache@v3
+        with:
+          path: build/llvm/instrumented
+          key: ${{ env.CACHE_KEY }}-profile
+
+      - name: Build LLVM Final
+        run: ./tc_scripts/init.sh final
