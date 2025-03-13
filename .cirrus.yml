@@ -2,7 +2,7 @@ env:
   TZ: Asia/Jakarta
   ghuser_name: mobxprjkt
   ghuser_email: mobxprjkt@proton.me
-  GITHUB_TOKEN: ENCRYPTED[f7b6950720285a315179075b3dcead57fd5c9be3c90534bcc28416bd46e3befe5e54b7782bf6051dc13738a6a2576f83]
+  GITHUB_TOKEN: ENCRYPTED[5fcb1fde264f303ee1b30961df2d591378151fede38e513139940521cf3706976fd314febe7f90513de9ce72d714af78]
   llvm_url: https://github.com/llvm/llvm-project.git
 
 container:
