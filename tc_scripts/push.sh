@@ -22,8 +22,8 @@ find "${install_path}" -mindepth 2 -maxdepth 3 -type f -exec file {} \; | grep '
 done
 
 # Clone the catalogue repository
-if ! pushd "${DIR}/greenforce_clang"; then
-    git clone --single-branch -b main "https://${ghuser_name}:${GITHUB_TOKEN}@github.com/mobxprjkt/clang" --depth=1 ||
+if ! pushd "${DIR}/clang"; then
+    git clone --single-branch -b main "https://${GH_USER}:${GH_TOKEN}@github.com/mobxprjkt/clang" --depth=1 ||
         {
             echo "Failed to clone the catalogue repository!"
             echo "Please check your server; it's likely that the repository exists."
@@ -53,11 +53,11 @@ export release_sizex="$(du -sh "${release_file}.xz" | awk '{print $1}')b"
 popd || exit 1
 
 # Push the commits and releases
-pushd "${DIR}/greenforce_clang" || exit 1
+pushd "${DIR}/clang" || exit 1
 bash "${DIR}/tc_scripts/info.sh"
 git add .
 git commit -s -m "$(cat /tmp/commit_msg)"
-git push "https://${ghuser_name}:${GITHUB_TOKEN}@github.com/mobxprjkt/clang" main -f
+git push "https://${GH_USER}:${GH_TOKEN}@github.com/mobxprjkt/clang" main -f
 
 if gh release view "${release_tag}"; then
     for release_file in "${install_path}"/${release_file}*; do

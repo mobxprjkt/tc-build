@@ -15,8 +15,8 @@ fi
 
 # Setup GitHub config and hooks
 mkdir -p ~/.git/hooks
-git config --global user.name "${ghuser_name}"
-git config --global user.email "${ghuser_email}"
+git config --global user.name "${GH_USER}"
+git config --global user.email "${GH_EMAIL}"
 git config --global core.hooksPath ~/.git/hooks
 curl -s -Lo ~/.git/hooks/commit-msg https://review.lineageos.org/tools/hooks/commit-msg
 chmod u+x ~/.git/hooks/commit-msg
