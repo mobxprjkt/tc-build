@@ -23,7 +23,7 @@ done
 
 # Clone the catalogue repository
 if ! pushd "${DIR}/greenforce_clang"; then
-    git clone --single-branch -b main "https://${ghuser_name}:${GITHUB_TOKEN}@github.com/greenforce-project/greenforce_clang" --depth=1 ||
+    git clone --single-branch -b main "https://${ghuser_name}:${GITHUB_TOKEN}@github.com/mobxprjkt/clang" --depth=1 ||
         {
             echo "Failed to clone the catalogue repository!"
             echo "Please check your server; it's likely that the repository exists."
@@ -57,7 +57,7 @@ pushd "${DIR}/greenforce_clang" || exit 1
 bash "${DIR}/tc_scripts/info.sh"
 git add .
 git commit -s -m "$(cat /tmp/commit_msg)"
-git push "https://${ghuser_name}:${GITHUB_TOKEN}@github.com/greenforce-project/greenforce_clang" main -f
+git push "https://${ghuser_name}:${GITHUB_TOKEN}@github.com/mobxprjkt/clang" main -f
 
 if gh release view "${release_tag}"; then
     for release_file in "${install_path}"/${release_file}*; do
