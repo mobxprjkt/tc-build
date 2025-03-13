@@ -18,12 +18,16 @@ env:
   CACHE_KEY: llvm-build-${{ github.run_id }}
 
 jobs:
-  clone:
-    name: Cloning Project (llvm source)
+  setup:
+    name: Set up Docker Image
     runs-on: ubuntu-latest
+    container:
+      image: mhmmdfdlyas/dockerfile:t-ubuntu  # Docker image yang akan digunakan di seluruh workflow
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Cache LLVM Source
         uses: actions/cache@v3
@@ -36,12 +40,11 @@ jobs:
 
   profile_build:
     name: Build LLVM (profile)
-    needs: clone
+    needs: setup
     runs-on: ubuntu-latest
+    container:
+      image: mhmmdfdlyas/dockerfile:t-ubuntu
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Restore Cached LLVM Source
         uses: actions/cache@v3
         with:
@@ -63,10 +66,12 @@ jobs:
     name: Build LLVM (final)
     needs: profile_build
     runs-on: ubuntu-latest
+    container:
+      image: mhmmdfdlyas/dockerfile:t-ubuntu
+    strategy:
+      matrix:
+        build_type: [release, debug]  # Parallel build untuk 2 konfigurasi
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Restore Cached LLVM Source
         uses: actions/cache@v3
         with:
@@ -79,5 +84,11 @@ jobs:
           path: build/llvm/instrumented
           key: ${{ env.CACHE_KEY }}-profile
 
-      - name: Build LLVM Final
-        run: ./tc_scripts/init.sh final
+      - name: Build LLVM Final (${{ matrix.build_type }})
+        run: ./tc_scripts/init.sh final --type=${{ matrix.build_type }}
+
+      - name: Upload LLVM Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: llvm-build-${{ matrix.build_type }}-${{ github.run_id }}
+          path: build/llvm/instrumented
