@@ -22,10 +22,12 @@ jobs:
   cloning_task:
     name: Cloning LLVM Source
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Check if init.sh exists in GitHub Runner
+        run: ls -l ${{ github.workspace }}/tc_scripts/ || echo "init.sh NOT FOUND in Runner!"
 
       - name: Pull Docker Image
         run: docker pull $DOCKER_IMAGE
@@ -37,53 +39,27 @@ jobs:
             git clone --single-branch '${LLVM_URL}' -b main /workspace/src/llvm-project --depth=1
           "
 
-      - name: Check if init.sh exists
-        run: ls -l ${{ github.workspace }}/tc_scripts/
-
   profile_task:
     name: Build LLVM (Profile)
     needs: cloning_task
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Start Docker Container
         run: |
           docker run -d --name $CONTAINER_NAME -v ${{ github.workspace }}:/workspace $DOCKER_IMAGE tail -f /dev/null
 
       - name: Check if init.sh exists inside Docker
-        run: docker exec $CONTAINER_NAME ls -l /workspace/tc_scripts/ || echo "init.sh not found!"
+        run: docker exec $CONTAINER_NAME ls -l /workspace/tc_scripts/ || echo "init.sh NOT FOUND in Docker!"
 
       - name: Run Profile Build
         run: |
           docker exec $CONTAINER_NAME bash -c "
-            chmod +x /workspace/tc_scripts/init.sh &&
-            /workspace/tc_scripts/init.sh profile
-          "
-
-      - name: Cleanup Unnecessary Files
-        run: docker exec $CONTAINER_NAME bash -c "find /workspace/build/llvm/instrumented -type f ! -name 'profdata.prof' -delete"
-
-      - name: Stop and Remove Container
-        run: docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME
-
-  final_task:
-    name: Build LLVM (Final)
-    needs: profile_task
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Start Docker Container
-        run: |
-          docker run -d --name $CONTAINER_NAME -v ${{ github.workspace }}:/workspace $DOCKER_IMAGE tail -f /dev/null
-
-      - name: Check if init.sh exists inside Docker
-        run: docker exec $CONTAINER_NAME ls -l /workspace/tc_scripts/ || echo "init.sh not found!"
-
-      - name: Run Final Build
-        run: |
-          docker exec $CONTAINER_NAME bash -c "
-            chmod +x /workspace/tc_scripts/init.sh &&
-            /workspace/tc_scripts/init.sh final
+            if [ -f /workspace/tc_scripts/init.sh ]; then
+              chmod +x /workspace/tc_scripts/init.sh &&
+              /workspace/tc_scripts/init.sh profile
+            else
+              echo 'ERROR: init.sh NOT FOUND!' && exit 1
+            fi
           "
 
       - name: Stop and Remove Container
