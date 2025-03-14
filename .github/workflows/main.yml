@@ -37,6 +37,9 @@ jobs:
             git clone --single-branch '${LLVM_URL}' -b main /workspace/src/llvm-project --depth=1
           "
 
+      - name: Check if init.sh exists
+        run: ls -l ${{ github.workspace }}/tc_scripts/
+
   profile_task:
     name: Build LLVM (Profile)
     needs: cloning_task
@@ -47,12 +50,14 @@ jobs:
         run: |
           docker run -d --name $CONTAINER_NAME -v ${{ github.workspace }}:/workspace $DOCKER_IMAGE tail -f /dev/null
 
+      - name: Check if init.sh exists inside Docker
+        run: docker exec $CONTAINER_NAME ls -l /workspace/tc_scripts/ || echo "init.sh not found!"
+
       - name: Run Profile Build
         run: |
           docker exec $CONTAINER_NAME bash -c "
-            cd /workspace &&
-            chmod +x ./tc_scripts/init.sh &&
-            ./tc_scripts/init.sh profile
+            chmod +x /workspace/tc_scripts/init.sh &&
+            /workspace/tc_scripts/init.sh profile
           "
 
       - name: Cleanup Unnecessary Files
@@ -71,12 +76,14 @@ jobs:
         run: |
           docker run -d --name $CONTAINER_NAME -v ${{ github.workspace }}:/workspace $DOCKER_IMAGE tail -f /dev/null
 
+      - name: Check if init.sh exists inside Docker
+        run: docker exec $CONTAINER_NAME ls -l /workspace/tc_scripts/ || echo "init.sh not found!"
+
       - name: Run Final Build
         run: |
           docker exec $CONTAINER_NAME bash -c "
-            cd /workspace &&
-            chmod +x ./tc_scripts/init.sh &&
-            ./tc_scripts/init.sh final
+            chmod +x /workspace/tc_scripts/init.sh &&
+            /workspace/tc_scripts/init.sh final
           "
 
       - name: Stop and Remove Container
