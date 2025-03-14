@@ -1,4 +1,4 @@
-name: Build LLVM with Docker
+name: Build LLVM
 
 on:
   push:
@@ -10,57 +10,77 @@ on:
   workflow_dispatch:
 
 env:
-  TZ: Asia/Jakarta
   GH_USER: ${{ secrets.GH_USER }}
   GH_EMAIL: ${{ secrets.GH_EMAIL }}
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  TZ: Asia/Jakarta
   LLVM_URL: https://github.com/llvm/llvm-project.git
-  DOCKER_IMAGE: mhmmdfdlyas/dockerfile:t-ubuntu
-  CONTAINER_NAME: llvm-builder
+  CACHE_KEY: llvm-build-${{ github.run_id }}
 
 jobs:
-  cloning_task:
-    name: Cloning LLVM Source
+  clone:
+    name: Cloning Project (llvm source)
     runs-on: ubuntu-latest
+    container: mhmmdfdlyas/dockerfile:t-ubuntu
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Check if init.sh exists in GitHub Runner
-        run: ls -l ${{ github.workspace }}/tc_scripts/ || echo "init.sh NOT FOUND in Runner!"
+      - name: Cache LLVM Source  
+        uses: actions/cache@v3  
+        with:  
+          path: src/llvm-project  
+          key: ${{ env.CACHE_KEY }}  
 
-      - name: Pull Docker Image
-        run: docker pull $DOCKER_IMAGE
+      - name: Clone LLVM  
+        run: git clone --single-branch "$LLVM_URL" -b main src/llvm-project --depth=1
 
-      - name: Clone LLVM Project
-        run: |
-          docker run --rm -v ${{ github.workspace }}:/workspace \
-            $DOCKER_IMAGE bash -c "
-            git clone --single-branch '${LLVM_URL}' -b main /workspace/src/llvm-project --depth=1
-          "
-
-  profile_task:
-    name: Build LLVM (Profile)
-    needs: cloning_task
+  profile_build:
+    name: Build LLVM (profile)
+    needs: clone
     runs-on: ubuntu-latest
+    container: mhmmdfdlyas/dockerfile:t-ubuntu
     steps:
-      - name: Start Docker Container
-        run: |
-          docker run -d --name $CONTAINER_NAME -v ${{ github.workspace }}:/workspace $DOCKER_IMAGE tail -f /dev/null
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Check if init.sh exists inside Docker
-        run: docker exec $CONTAINER_NAME ls -l /workspace/tc_scripts/ || echo "init.sh NOT FOUND in Docker!"
+      - name: Restore Cached LLVM Source  
+        uses: actions/cache@v3  
+        with:  
+          path: src/llvm-project  
+          key: ${{ env.CACHE_KEY }}  
 
-      - name: Run Profile Build
-        run: |
-          docker exec $CONTAINER_NAME bash -c "
-            if [ -f /workspace/tc_scripts/init.sh ]; then
-              chmod +x /workspace/tc_scripts/init.sh &&
-              /workspace/tc_scripts/init.sh profile
-            else
-              echo 'ERROR: init.sh NOT FOUND!' && exit 1
-            fi
-          "
+      - name: Build LLVM Profile  
+        run: |  
+          ./tc_scripts/init.sh profile  
+          find build/llvm/instrumented -type f ! -name 'profdata.prof' -delete  
 
-      - name: Stop and Remove Container
-        run: docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME
+      - name: Cache Build Profile  
+        uses: actions/cache@v3  
+        with:  
+          path: build/llvm/instrumented  
+          key: ${{ env.CACHE_KEY }}-profile
+
+  final_build:
+    name: Build LLVM (final)
+    needs: profile_build
+    runs-on: ubuntu-latest
+    container: mhmmdfdlyas/dockerfile:t-ubuntu
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Restore Cached LLVM Source  
+        uses: actions/cache@v3  
+        with:  
+          path: src/llvm-project  
+          key: ${{ env.CACHE_KEY }}  
+
+      - name: Restore Cached Build Profile  
+        uses: actions/cache@v3  
+        with:  
+          path: build/llvm/instrumented  
+          key: ${{ env.CACHE_KEY }}-profile  
+
+      - name: Build LLVM Final  
+        run: ./tc_scripts/init.sh final
