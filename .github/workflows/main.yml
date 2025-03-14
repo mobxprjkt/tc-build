@@ -1,4 +1,4 @@
-name: Build LLVM
+name: Build LLVM with Docker
 
 on:
   push:
@@ -10,85 +10,74 @@ on:
   workflow_dispatch:
 
 env:
+  TZ: Asia/Jakarta
   GH_USER: ${{ secrets.GH_USER }}
   GH_EMAIL: ${{ secrets.GH_EMAIL }}
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
-  TZ: Asia/Jakarta
   LLVM_URL: https://github.com/llvm/llvm-project.git
-  CACHE_KEY: llvm-build-${{ github.run_id }}
+  DOCKER_IMAGE: mhmmdfdlyas/dockerfile:t-ubuntu
+  CONTAINER_NAME: llvm-builder
 
 jobs:
-  setup:
-    name: Set up Docker Image
+  cloning_task:
+    name: Cloning LLVM Source
     runs-on: ubuntu-latest
-    container:
-      image: mhmmdfdlyas/dockerfile:t-ubuntu  # Docker image yang akan digunakan di seluruh workflow
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: Cache LLVM Source
-        uses: actions/cache@v3
-        with:
-          path: src/llvm-project
-          key: ${{ env.CACHE_KEY }}
+      - name: Pull Docker Image
+        run: docker pull $DOCKER_IMAGE
 
-      - name: Clone LLVM
-        run: git clone --single-branch "$LLVM_URL" -b main src/llvm-project --depth=1
-
-  profile_build:
-    name: Build LLVM (profile)
-    needs: setup
-    runs-on: ubuntu-latest
-    container:
-      image: mhmmdfdlyas/dockerfile:t-ubuntu
-    steps:
-      - name: Restore Cached LLVM Source
-        uses: actions/cache@v3
-        with:
-          path: src/llvm-project
-          key: ${{ env.CACHE_KEY }}
-
-      - name: Build LLVM Profile
+      - name: Clone LLVM Project
         run: |
-          ./tc_scripts/init.sh profile
-          find build/llvm/instrumented -type f ! -name 'profdata.prof' -delete
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            $DOCKER_IMAGE bash -c "
+            git clone --single-branch '${LLVM_URL}' -b main /workspace/src/llvm-project --depth=1
+          "
 
-      - name: Cache Build Profile
-        uses: actions/cache@v3
-        with:
-          path: build/llvm/instrumented
-          key: ${{ env.CACHE_KEY }}-profile
-
-  final_build:
-    name: Build LLVM (final)
-    needs: profile_build
+  profile_task:
+    name: Build LLVM (Profile)
+    needs: cloning_task
     runs-on: ubuntu-latest
-    container:
-      image: mhmmdfdlyas/dockerfile:t-ubuntu
-    strategy:
-      matrix:
-        build_type: [release, debug]  # Parallel build untuk 2 konfigurasi
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
-      - name: Restore Cached LLVM Source
-        uses: actions/cache@v3
-        with:
-          path: src/llvm-project
-          key: ${{ env.CACHE_KEY }}
+      - name: Start Docker Container
+        run: |
+          docker run -d --name $CONTAINER_NAME -v ${{ github.workspace }}:/workspace $DOCKER_IMAGE tail -f /dev/null
 
-      - name: Restore Cached Build Profile
-        uses: actions/cache@v3
-        with:
-          path: build/llvm/instrumented
-          key: ${{ env.CACHE_KEY }}-profile
+      - name: Run Profile Build
+        run: |
+          docker exec $CONTAINER_NAME bash -c "
+            cd /workspace &&
+            chmod +x ./tc_scripts/init.sh &&
+            ./tc_scripts/init.sh profile
+          "
 
-      - name: Build LLVM Final (${{ matrix.build_type }})
-        run: ./tc_scripts/init.sh final --type=${{ matrix.build_type }}
+      - name: Cleanup Unnecessary Files
+        run: docker exec $CONTAINER_NAME bash -c "find /workspace/build/llvm/instrumented -type f ! -name 'profdata.prof' -delete"
 
-      - name: Upload LLVM Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: llvm-build-${{ matrix.build_type }}-${{ github.run_id }}
-          path: build/llvm/instrumented
+      - name: Stop and Remove Container
+        run: docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME
+
+  final_task:
+    name: Build LLVM (Final)
+    needs: profile_task
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Start Docker Container
+        run: |
+          docker run -d --name $CONTAINER_NAME -v ${{ github.workspace }}:/workspace $DOCKER_IMAGE tail -f /dev/null
+
+      - name: Run Final Build
+        run: |
+          docker exec $CONTAINER_NAME bash -c "
+            cd /workspace &&
+            chmod +x ./tc_scripts/init.sh &&
+            ./tc_scripts/init.sh final
+          "
+
+      - name: Stop and Remove Container
+        run: docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME
